@@ -1,3 +1,6 @@
+CREATE SCHEMA sherry_homework
+    AUTHORIZATION sherry_yu;
+
 CREATE TABLE sherry_homework.order_summary(
 	id BIGINT,
 	email VARCHAR(50),
@@ -96,5 +99,6 @@ CREATE TABLE sherry_homework.order_item(
 	variant_id BIGINT,
 	quantity INTEGER,
 	product_id BIGINT,
-	order_id BIGINT references sherry_homework.order_summary(id)
+	order_id BIGINT references sherry_homework.order_summary(id),
+	PRIMARY KEY (item_id,order_id)
 );

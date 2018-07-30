@@ -87,6 +87,8 @@ class Order(object):
 	def return_order_summary(self):
 		'''
 		Output: return row in order summary table
+		order_summay table contains only summary information for each order. Do not contain large text and other detail information,
+		make it easier for user to check order status (in process, closed or cancelled)
 		'''
 		order_row = list()
 		order_row.append (self.id) # PRIMARY KEY 
@@ -103,6 +105,7 @@ class Order(object):
 	def return_payment_info(self):
 		'''
 		Output: return row in payment info table
+		payment_info table contains the (potential) payment information for each order.
 		'''
 		payment_row = list()
 		payment_row.append(self.id) # foreign key 
@@ -120,6 +123,7 @@ class Order(object):
 	def return_order_detail(self):
 		'''
 		Output: return row order detail table
+		order_detail table contains all detail information for every order include tax, token, sub price and long text (e.g. note)
 		'''
 		order_detail_row = list()
 		order_detail_row.append(self.id) # primary key
@@ -152,6 +156,7 @@ class Order(object):
 	def return_order_item(self):
 		'''
 		Output: return rows in order item table
+		order_item table is a table that connect order with items(product), along with order specific information like quantity
 		'''
 		order_item_rows = list()
 		for order_item in self.line_items:
@@ -167,6 +172,7 @@ class Order(object):
 	def return_order_user(self):
 		'''
 		Output: return row in order user table
+		order_user table connects order with user (one user may have several orders), along with the device information 
 		'''
 		order_user = list()
 		order_user.append(self.id) # foreign key 
@@ -194,6 +200,7 @@ class User(object):
 	def return_user_basic(self):
 		'''
 		Ourput: row in user basic table
+		User table contains basic information for each user
 		'''
 		user_basic = list()
 		user_basic.append(self.user_id)
@@ -204,6 +211,8 @@ class User(object):
 	def return_user_device(self):
 		'''
 		Output: return device for user
+		User device table contains user and device information, one user may have sevral devices. I design this table and think it may be useful
+		when we want to make sure order's safety by checking whether the order is made through a trusted device. 
 		'''
 		user_device = list()
 		user_device.append(self.user_id) # primary key part 1
@@ -227,6 +236,7 @@ class Item(object):
 	def return_items(self):
 		'''
 		Output: rows in item table
+		item tables contain basic item information 
 		'''
 		items = list()
 		for item in self.all_items:
@@ -238,6 +248,9 @@ class Item(object):
 		return items
 
 def reset():
+	'''
+	reset for every file 
+	'''
 	global ORDER_LIST
 	global ORDER_DETAIL_LIST
 	global ORDER_PAYMENT_LIST
@@ -257,6 +270,9 @@ def reset():
 	ITEM_LIST = list()
 
 def check_connection():
+	'''
+	Make sure the connection to postgre work 
+	'''
 	try:
 		conn = psycopg2.connect(POSTGRE,connect_timeout=3)
 		conn.close()
@@ -265,6 +281,11 @@ def check_connection():
 		exit(0)
 
 def get_zip_file():
+	'''
+	extract zip file through the given url
+	loop every json file in the zip file and do the parser
+	in the end insert those item in the table 
+	'''
 	s3 = boto3.resource('s3')
 	_, bucket_name, key = urlparse(URL).path.split('/', 2)
 	obj = s3.Object(
@@ -279,8 +300,12 @@ def get_zip_file():
 		json_parser(content)
 		insert_order()
 		print ("Done")
+	z.close()
 		
 def json_parser(content):
+	'''
+	Create object and extract rows 
+	'''
 	global ITEM_LIST
 	global ORDER_ITEM_LIST
 	obj = json.loads(content)
@@ -302,6 +327,9 @@ def json_parser(content):
 		ITEM_LIST = ITEM_LIST + item_object.return_items()
 
 def insert_order():
+	'''
+	Insert into postgre database in batch
+	'''
 
 	conn = psycopg2.connect(POSTGRE)
 	cur = conn.cursor()
@@ -343,7 +371,7 @@ def insert_order():
 
 	db_order_item = "sherry_homework.order_item"
 	data_str_insert_order_item = b','.join(cur.mogrify('(%s,%s,%s,%s,%s)',row) for row in ORDER_ITEM_LIST)
-	sql_insert_order_item = "INSERT INTO " + db_order_item + " VALUES " + data_str_insert_order_item.decode("utf-8")+";"
+	sql_insert_order_item = "INSERT INTO " + db_order_item + " VALUES " + data_str_insert_order_item.decode("utf-8")+" ON CONFLICT (order_id, item_id) DO NOTHING;"
 	cur.execute(sql_insert_order_item)
 
 	conn.commit()
@@ -352,8 +380,12 @@ def insert_order():
 
 if __name__ == "__main__":
 
-	with open('credential.txt') as f:
-		credentials = [x.strip().split('=') for x in f.readlines()]
+	try:
+		with open('./src/credential.txt') as f:
+			credentials = [x.strip().split('=') for x in f.readlines()]
+	except:
+		print('No credential file found!')
+		exit(0)
 
 	for c in credentials:
 		if c[0] == 's3url': URL = c[1]
