@@ -11,9 +11,8 @@ POSTGRE = '' # DATABASE CONNECTION
 # object table
 ORDER_LIST = list()
 ORDER_DETAIL_LIST = list()
-ORDER_PAYMENT_LIST = list()
 USER_LIST = list()
-USER_DEVICE = list()
+USER_PLACE = list()
 ITEM_LIST = list()
 
 # connection table
@@ -55,7 +54,6 @@ class Order(object):
 		self.total_price_usd = args.get('total_price_usd',None) # for check out
 		self.checkout_token = args.get('checkout_token',None) # for check out
 		self.reference = args.get('reference',None) # for check out
-		self.processed_at = args.get('processed_at',None) # for checkout
 		self.order_number = args.get('order_number',None) # for checkout
 		self.processing_method = args.get('processing_method',None) # for checkout
 		self.checkout_id = args.get('checkout_id', None)  # for checkout id
@@ -67,7 +65,7 @@ class Order(object):
 
 		# for connection purpose
 		self.user_id = args.get('user_id')
-		self.device_id = args.get('device_id')
+		self.location_id = args.get('location_id')
 
 		# calculate
 		self.items_number = len(self.line_items) # for summary table 
@@ -102,24 +100,6 @@ class Order(object):
 		order_row = [str(x) for x in order_row]
 		return order_row
 
-	def return_payment_info(self):
-		'''
-		Output: return row in payment info table
-		payment_info table contains the (potential) payment information for each order.
-		'''
-		payment_row = list()
-		payment_row.append(self.id) # foreign key 
-		payment_row.append(self.order_number) # PRIMARY KEY 
-		payment_row.append(self.total_price_usd)
-		payment_row.append(self.checkout_token)
-		payment_row.append(self.reference)
-		payment_row.append(self.processed_at)
-		payment_row.append(self.source_name)
-		payment_row.append(self.fulfillment_status)
-		payment_row.append(self.processing_method)
-		payment_row.append(self.checkout_id)
-		return payment_row
-
 	def return_order_detail(self):
 		'''
 		Output: return row order detail table
@@ -151,6 +131,15 @@ class Order(object):
 		order_detail_row.append(self.cancelled_at)
 		order_detail_row.append(self.cancel_reason)
 		order_detail_row.append(self.tags)
+		# payment
+		order_detail_row.append(self.order_number) 
+		order_detail_row.append(self.total_price_usd)
+		order_detail_row.append(self.checkout_token)
+		order_detail_row.append(self.reference)
+		order_detail_row.append(self.source_name)
+		order_detail_row.append(self.fulfillment_status)
+		order_detail_row.append(self.processing_method)
+		order_detail_row.append(self.checkout_id)
 		return order_detail_row
 
 	def return_order_item(self):
@@ -172,12 +161,12 @@ class Order(object):
 	def return_order_user(self):
 		'''
 		Output: return row in order user table
-		order_user table connects order with user (one user may have several orders), along with the device information 
+		order_user table connects order with user (one user may have several orders), along with the location information 
 		'''
 		order_user = list()
 		order_user.append(self.id) # foreign key 
 		order_user.append(self.user_id) # foreign key 
-		order_user.append(self.device_id) # foreign key 
+		order_user.append(self.location_id) # foreign key 
 		return order_user
 
 class User(object):
@@ -208,24 +197,24 @@ class User(object):
 		user_basic.append(self.contact_email)
 		return user_basic
 
-	def return_user_device(self):
+	def return_user_place(self):
 		'''
-		Output: return device for user
-		User device table contains user and device information, one user may have sevral devices. I design this table and think it may be useful
-		when we want to make sure order's safety by checking whether the order is made through a trusted device. 
+		Output: return location infor for user
+		User_place table contains user and location information, one user may go to sevral location. I design this table and think it may be useful
+		to trace whether a customer return or other payment information through different place (like how many users or how many orders for each location)
 		'''
-		user_device = list()
-		user_device.append(self.user_id) # primary key part 1
-		user_device.append(self.location_id)
-		user_device.append(self.source_identifier)
-		user_device.append(self.source_url)
-		user_device.append(self.processed_at)
-		user_device.append(self.device_id) # primary key part 2
-		user_device.append(self.customer_locale)
-		user_device.append(self.app_id)
-		user_device.append(self.browser_ip)
-		user_device.append(self.landing_site_ref)
-		return user_device
+		user_place = list()
+		user_place.append(self.user_id) # primary key part 1
+		user_place.append(self.location_id)
+		user_place.append(self.source_identifier)
+		user_place.append(self.source_url)
+		user_place.append(self.processed_at)
+		user_place.append(self.device_id) # primary key part 2
+		user_place.append(self.customer_locale)
+		user_place.append(self.app_id)
+		user_place.append(self.browser_ip)
+		user_place.append(self.landing_site_ref)
+		return user_place
 
 
 class Item(object):
@@ -253,20 +242,18 @@ def reset():
 	'''
 	global ORDER_LIST
 	global ORDER_DETAIL_LIST
-	global ORDER_PAYMENT_LIST
 	global ORDER_ITEM_LIST
 	global ORDER_USER_LIST
 	global USER_LIST
-	global USER_DEVICE
+	global USER_PLACE
 	global ITEM_LIST
 
 	ORDER_LIST = list()
 	ORDER_DETAIL_LIST = list()
-	ORDER_PAYMENT_LIST = list()
 	ORDER_ITEM_LIST = list()
 	ORDER_USER_LIST = list()
 	USER_LIST = list()
-	USER_DEVICE = list()
+	USER_PLACE = list()
 	ITEM_LIST = list()
 
 def check_connection():
@@ -279,7 +266,28 @@ def check_connection():
 	except:
 		print("connection to database failed!")
 		exit(0)
+		
+def assert_function(filename):
+	'''
+	The order_summay, order_detail, order_user should contain same number of row. 
+	'''
+	conn = psycopg2.connect(POSTGRE)
+	cur = conn.cursor()
 
+	sql_count_order_summary = '''select count(*) from sherry_homework.order_summary;'''
+	sql_count_order_detail = '''select count(*) from sherry_homework.order_detail;'''
+	sql_count_order_user = '''select count(*) from sherry_homework.order_user;'''
+
+	cur.execute(sql_count_order_summary)
+	count_order_Summary = cur.fetchall()[0][0]
+	cur.execute(sql_count_order_detail)
+	count_order_detail = cur.fetchall()[0][0]
+	cur.execute(sql_count_order_user)
+	count_order_user = cur.fetchall()[0][0]
+	assert count_order_user == count_order_detail == count_order_Summary, "Some thing wrong here!" + filename
+
+	conn.close()
+ 
 def get_zip_file():
 	'''
 	extract zip file through the given url
@@ -299,6 +307,7 @@ def get_zip_file():
 		content = z.read(filename)
 		json_parser(content)
 		insert_order()
+		assert_function(filename)
 		print ("Done")
 	z.close()
 		
@@ -314,14 +323,13 @@ def json_parser(content):
 		order_object = Order(order)
 		ORDER_LIST.append(order_object.return_order_summary())
 		ORDER_DETAIL_LIST.append(order_object.return_order_detail())
-		ORDER_PAYMENT_LIST.append(order_object.return_payment_info())
 
 		ORDER_USER_LIST.append(order_object.return_order_user())
 		ORDER_ITEM_LIST = ORDER_ITEM_LIST + order_object.return_order_item()
 
 		user_object = User(order)
 		USER_LIST.append(user_object.return_user_basic())
-		USER_DEVICE.append(user_object.return_user_device())
+		USER_PLACE.append(user_object.return_user_place())
 
 		item_object = Item(order)
 		ITEM_LIST = ITEM_LIST + item_object.return_items()
@@ -339,30 +347,34 @@ def insert_order():
 	sql_insert = "INSERT INTO " + db + " VALUES "+data_str_insert.decode("utf-8") +" ON CONFLICT (id) DO NOTHING;"
 	cur.execute(sql_insert)
 
-	db_summary = "sherry_homework.order_detail"
-	data_str_insert_summary = b','.join(cur.mogrify('(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',row) for row in ORDER_DETAIL_LIST)
-	sql_insert_detail = "INSERT INTO " + db_summary + " VALUES " + data_str_insert_summary.decode("utf-8") + " ON CONFLICT (id) DO NOTHING;"
+	db_detail = "sherry_homework.order_detail"
+	data_str_insert_detail = b','.join(cur.mogrify('(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',row) for row in ORDER_DETAIL_LIST)
+	sql_insert_detail = "INSERT INTO " + db_detail + " VALUES " + data_str_insert_detail.decode("utf-8") + " ON CONFLICT (id) DO NOTHING;"
 	cur.execute(sql_insert_detail)
+
+	'''
+	Invalidate situation, the program should stop!
+
+	db_detail = "sherry_homework.order_detail"
+	data_str_insert_detail = b','.join(cur.mogrify('(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',row) for row in ORDER_DETAIL_LIST[:10])
+	sql_insert_detail = "INSERT INTO " + db_detail + " VALUES " + data_str_insert_detail.decode("utf-8") + " ON CONFLICT (id) DO NOTHING;"
+	cur.execute(sql_insert_detail)
+	'''
 
 	db_user = "sherry_homework.user"
 	data_str_insert_user = b','.join(cur.mogrify('(%s,%s,%s)',row) for row in USER_LIST)
 	sql_insert_user = "INSERT INTO " + db_user + " VALUES " + data_str_insert_user.decode("utf-8") + " ON CONFLICT (user_id) DO NOTHING;"
 	cur.execute(sql_insert_user)
 
-	db_user_device = "sherry_homework.user_device"
-	data_str_insert_user_device = b','.join(cur.mogrify('(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',row) for row in USER_DEVICE)
-	sql_insert_user_device = "INSERT INTO " + db_user_device + " VALUES " + data_str_insert_user_device.decode("utf-8") + " ON CONFLICT (user_id,device_id) DO NOTHING;"
-	cur.execute(sql_insert_user_device)
+	db_user_place = "sherry_homework.user_place"
+	data_str_insert_user_place = b','.join(cur.mogrify('(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',row) for row in USER_PLACE)
+	sql_insert_user_place = "INSERT INTO " + db_user_place + " VALUES " + data_str_insert_user_place.decode("utf-8") + " ON CONFLICT (user_id,location_id) DO NOTHING;"
+	cur.execute(sql_insert_user_place)
 
 	db_item = "sherry_homework.item"
 	data_str_insert_item = b','.join(cur.mogrify('(%s,%s,%s)',row) for row in ITEM_LIST)
 	sql_insert_item = "INSERT INTO " + db_item + " VALUES " + data_str_insert_item.decode("utf-8") + " ON CONFLICT (id) DO NOTHING;"
 	cur.execute(sql_insert_item)
-
-	db_order_payment = "sherry_homework.order_payment"
-	data_str_insert_order_payment = b','.join(cur.mogrify('(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',row) for row in ORDER_PAYMENT_LIST)
-	sql_insert_order_payment = "INSERT INTO " + db_order_payment + " VALUES " + data_str_insert_order_payment.decode("utf-8") + " ON CONFLICT (order_id,order_number) DO NOTHING;"
-	cur.execute(sql_insert_order_payment)
 
 	db_order_user = "sherry_homework.order_user"
 	data_str_insert_order_user = b','.join(cur.mogrify('(%s,%s,%s)',row) for row in ORDER_USER_LIST)

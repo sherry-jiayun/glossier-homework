@@ -40,6 +40,15 @@ CREATE TABLE sherry_homework.order_detail(
 	cancel_reason TEXT,
 	tags TEXT,
 	
+	order_number BIGINT,
+	total_price_usd DECIMAL,
+	checkout_token VARCHAR(20),
+	reference VARCHAR(200),
+	source_name VARCHAR(20),
+	fulfillment_status VARCHAR(20),
+	processing_method  VARCHAR(20),
+	checkout_id VARCHAR(20),
+
 	PRIMARY KEY (id)
 );
 
@@ -51,7 +60,7 @@ CREATE TABLE sherry_homework.user(
 	PRIMARY KEY (user_id)
 );
 
-CREATE TABLE sherry_homework.user_device(
+CREATE TABLE sherry_homework.user_place(
 	user_id BIGINT references sherry_homework.user(user_id) ON DELETE CASCADE,
 	location_id BIGINT,
 	source_identifier VARCHAR(20),
@@ -62,7 +71,7 @@ CREATE TABLE sherry_homework.user_device(
 	app_id INTEGER,
 	browser_ip VARCHAR(10),
 	landing_site_ref VARCHAR(20),
-	PRIMARY KEY (user_id,device_id)
+	PRIMARY KEY (user_id,location_id)
 );
 
 CREATE TABLE sherry_homework.item(
@@ -72,26 +81,12 @@ CREATE TABLE sherry_homework.item(
 	PRIMARY KEY (id)
 );
 
-CREATE TABLE sherry_homework.order_payment(
-	order_id BIGINT references sherry_homework.order_summary(id) ON DELETE CASCADE,
-	order_number BIGINT,
-	total_price_usd DECIMAL,
-	checkout_token VARCHAR(20),
-	reference VARCHAR(200),
-	processed_at DATE,
-	source_name VARCHAR(20),
-	fulfillment_status VARCHAR(20),
-	processing_method  VARCHAR(20),
-	checkout_id VARCHAR(20),
-	PRIMARY KEY(order_id, order_number)
-);
-
 CREATE TABLE sherry_homework.order_user(
 	order_id BIGINT references sherry_homework.order_summary(id) ON DELETE CASCADE,
 	user_id BIGINT,
-	device_id BIGINT,
+	location_id BIGINT,
 	PRIMARY KEY (order_id),
-	FOREIGN KEY (user_id, device_id) REFERENCES sherry_homework.user_device(user_id,device_id)
+	FOREIGN KEY (user_id, location_id) REFERENCES sherry_homework.user_place(user_id,location_id)
 );
 
 CREATE TABLE sherry_homework.order_item(
@@ -99,6 +94,6 @@ CREATE TABLE sherry_homework.order_item(
 	variant_id BIGINT,
 	quantity INTEGER,
 	product_id BIGINT,
-	order_id BIGINT references sherry_homework.order_summary(id),
+	order_id BIGINT references sherry_homework.order_summary(id) ON DELETE CASCADE,
 	PRIMARY KEY (item_id,order_id)
 );
